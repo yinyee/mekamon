@@ -172,7 +172,8 @@
 			this.canvas = document.createElement('canvas');
 			// Scale to same size as original canvas
 			this.resize(true);
-			document.body.appendChild(this.canvas);
+			// document.body.appendChild(this.canvas);
+			GameController.options.canvas.parentNode.appendChild(this.canvas);
 			this.ctx = this.canvas.getContext( '2d');
 			window.addEventListener( 'resize', function() {
 				setTimeout(function(){ GameController.resize.call(_this); }, 10);
@@ -605,6 +606,18 @@
 		 * requestAnimationFrame (bad for garbage collection)
 		 */
 		renderWrapper: function() { GameController.render(); },
+
+		setPosition: function(id, normalizedX, normalizedY) {
+                        var joystick = this.touchableAreas[id];
+                        var max = joystick.radius + this.options.touchRadius / 2;
+                        joystick.currentX = joystick.x + normalizedX * max;
+                        joystick.currentY = joystick.y - normalizedY * max;
+                        joystick.fixed = true;
+                        var paused = this.paused;
+                        this.paused = false;
+                        this.render();
+                        this.paused = paused;
+                },
 	};
 
 	/**
@@ -909,28 +922,53 @@
 		 * Called when this joystick is moved
 		 */
 		TouchableJoystick.prototype.touchMoveWrapper = function( e ) {
-			this.currentX = GameController.normalizeTouchPositionX(e.clientX);
-			this.currentY = GameController.normalizeTouchPositionY(e.clientY);
+	        if (!this.fixed) {
+	                this.currentX = GameController.normalizeTouchPositionX(e.clientX);
+	                this.currentY = GameController.normalizeTouchPositionY(e.clientY);
 
-			// Fire the user specified callback
-			if( this.touchMove &&
-				this.moveDetails.dx !== this.currentX - this.x &&
-				this.moveDetails.dy !== this.y - this.currentY
-				){
-				// reverse so right is positive
-				this.moveDetails.dx = this.currentX - this.x;
-				this.moveDetails.dy = this.y - this.currentY;
-				this.moveDetails.max =
-					this.radius + GameController.options.touchRadius / 2;
-				this.moveDetails.normalizedX =
-					this.moveDetails.dx / this.moveDetails.max;
-				this.moveDetails.normalizedY =
-					this.moveDetails.dy / this.moveDetails.max;
-				this.touchMove(this.moveDetails);
-			}
+	                // Fire the user specified callback
+	                if( this.touchMove &&
+	                        this.moveDetails.dx !== this.currentX - this.x &&
+	                        this.moveDetails.dy !== this.y - this.currentY
+	                        ){
+	                        // reverse so right is positive
+	                        this.moveDetails.dx = this.currentX - this.x;
+	                        this.moveDetails.dy = this.y - this.currentY;
+	                        this.moveDetails.max =
+	                                this.radius + GameController.options.touchRadius / 2;
+	                        this.moveDetails.normalizedX =
+	                                this.moveDetails.dx / this.moveDetails.max;
+	                        this.moveDetails.normalizedY =
+	                                this.moveDetails.dy / this.moveDetails.max;
+	                        this.touchMove(this.moveDetails);
+	                }
 
-			// Mark this direction as inactive
-			this.active = true;
+	                // Mark this direction as inactive
+	                this.active = true;
+	        }
+		};
+
+		TouchableJoystick.prototype.touchEndWrapper = function( e ) {
+		        if (!this.fixed) {
+		                if ((this.currentX != this.x) ||
+		                    (this.currentY != this.y)) {
+		                        this.currentX = this.x;
+		                        this.currentY = this.y;
+		                        GameController.paused = false;
+		                        GameController.render();
+		                } else {
+		                        GameController.paused = true;
+		                        this.moveDetails.dx = this.currentX - this.x;
+		                        this.moveDetails.dy = this.y - this.currentY;
+		                        this.moveDetails.max =
+		                                this.radius + GameController.options.touchRadius / 2;
+		                        this.moveDetails.normalizedX =
+		                                this.moveDetails.dx / this.moveDetails.max;
+		                        this.moveDetails.normalizedY =
+		                                this.moveDetails.dy / this.moveDetails.max;
+		                        this.touchEnd(this.moveDetails);
+		                }
+		        }
 		};
 
 		TouchableJoystick.prototype.draw = function() {
@@ -948,18 +986,18 @@
 				ctx = subCanvas.getContext( '2d');
 				ctx.lineWidth = this.stroke;
 				// Direction currently being touched
-				if( this.active ) {
-					gradient = ctx.createRadialGradient( 0, 0, 1, 0, 0, r);
-					gradient.addColorStop(0, 'rgba( 200,200,200,.5 )');
-					gradient.addColorStop(1, 'rgba( 200,200,200,.9 )');
-					ctx.strokeStyle = '#000';
-				} else {
-					// STYLING FOR BUTTONS
-					gradient = ctx.createRadialGradient( 0, 0, 1, 0, 0, r);
-					gradient.addColorStop(0, 'rgba( 200,200,200,.2 )');
-					gradient.addColorStop(1, 'rgba( 200,200,200,.4 )');
-					ctx.strokeStyle = 'rgba( 0,0,0,.4 )';
-				}
+	            if( this.active ) {
+	                    gradient = ctx.createRadialGradient( 0, 0, 1, 0, 0, r);
+	                    gradient.addColorStop(0, this.activeGradient ? this.activeGradient[0] : 'rgba( 200,200,200,.5 )');
+	                    gradient.addColorStop(1, this.activeGradient ? this.activeGradient[1] : 'rgba( 200,200,200,.9 )');
+	                    ctx.strokeStyle = this.activeStrokeStyle || '#000';
+	            } else {
+	                    // STYLING FOR BUTTONS
+	                    gradient = ctx.createRadialGradient( 0, 0, 1, 0, 0, r);
+	                    gradient.addColorStop(0, this.inactiveGradient ? this.inactiveGradient[0] : 'rgba( 200,200,200,.2 )');
+	                    gradient.addColorStop(1, this.inactiveGradient ? this.inactiveGradient[1] : 'rgba( 200,200,200,.4 )');
+	                    ctx.strokeStyle = this.inactiveStrokeStyle || 'rgba( 0,0,0,.4 )';
+	            }
 				ctx.fillStyle = gradient;
 				// Actual joystick part that is being moved
 				ctx.beginPath();
